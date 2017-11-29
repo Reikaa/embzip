@@ -47,6 +47,9 @@ if __name__ == '__main__':
                         type=int,
                         default=1000,
                         help='Number of embeddings for validation')
+    parser.add_argument('--cuda',
+                        action='store_true',
+                        help='Run on GPU')
     args = parser.parse_args()
 
     # load embeddings
@@ -69,11 +72,18 @@ if __name__ == '__main__':
     losses = []
     old_params = None
 
+    if args.cuda:
+        print('CUDA')
+        ec.cuda()
+        criterion.cuda()
+
     samples = 0
     while samples < args.samples:
 
         # shuffle embeddings
         embeddings = train_vocab['embeddings'][torch.randperm(train_vocab['n_embs'])]
+        if args.cuda:
+            embeddings = embeddings.cuda()
 
         # train
         for k in range(0, train_vocab['n_embs'], args.batch_size):
@@ -107,6 +117,8 @@ if __name__ == '__main__':
 
                 # validate
                 v_batch = valid_vocab['embeddings']
+                if args.cuda:
+                    v_batch = v_batch.cuda()
                 v_y = ec(v_batch)
                 v_loss = criterion(v_y, v_batch)
                 print('\nvalid_loss: %.3f' % (v_loss.data[0] / v_batch.data.shape[0]))
