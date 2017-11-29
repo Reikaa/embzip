@@ -94,7 +94,7 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10):
     (MIT license)
     """
     shape = logits.size()
-    #assert len(shape) == 2
+    assert len(shape) == 2
     y_soft = gumbel_softmax_sample(logits, tau=tau, eps=eps)
     if hard:
         _, k = y_soft.data.max(-1)
@@ -158,17 +158,17 @@ class EmbeddingCompressor(nn.Module):
 
         # h = batch x (n_tables * n_codes / 2)
         a = nn.functional.softplus(self.linear2(h))
-        a = a.view(self.n_tables, -1, self.n_codes)
+        #a = a.view(self.n_tables, -1, self.n_codes)
 
         # a = batch x (n_tables * n_codes)
         #print('a', a.data.shape)
 
         d = gumbel_softmax(a, tau=self.temp, hard=False)
-        #d = d.view(self.n_tables, -1, self.n_codes)
+        d = d.view(self.n_tables, -1, self.n_codes)
         #d = d.view(self.n_tables, -1, self.n_codes)
         # print('d', d.size())
         # print(d.data)
-        # print(torch.sum(d.data, -1))
+        #print(torch.sum(d.data, -1))
 
         return self.embeddings(d)
 
