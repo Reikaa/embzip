@@ -55,7 +55,7 @@ if __name__ == '__main__':
     # load embeddings
     train_g, valid_g = load_embeddings_txt(args.path, args.n_embs, args.valid)
     train_vocab = make_vocab(train_g)
-    valid_vocab = make_vocab(valid_g)
+    valid_vocab = make_vocab(valid_g) if valid_g else train_vocab
 
     # stats
     print_compression_stats(train_vocab, args.n_tables, args.n_codes)
@@ -72,8 +72,8 @@ if __name__ == '__main__':
     losses = []
     old_params = None
 
+    print('[CUDA]', args.cuda)
     if args.cuda:
-        print('CUDA')
         ec.cuda()
         criterion.cuda()
 
@@ -112,7 +112,6 @@ if __name__ == '__main__':
 
             if samples % args.report_every == 0:
                 avg_train_loss = sum(losses) / len(losses) / args.batch_size
-                print('train_loss: %.3f' % avg_train_loss)
                 losses = []
 
                 # validate
@@ -121,7 +120,8 @@ if __name__ == '__main__':
                     v_batch = v_batch.cuda()
                 v_y = ec(v_batch)
                 v_loss = criterion(v_y, v_batch)
-                print('\nvalid_loss: %.3f' % (v_loss.data[0] / v_batch.data.shape[0]))
+                v_loss = v_loss.data[0] / v_batch.data.shape[0]
+                print('[%d] train: %.2f | valid: %.2f' % (samples, avg_train_loss, v_loss))
 
         #check_training(old_params, ec.parameters())
         #old_params = ec.parameters()

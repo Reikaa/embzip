@@ -163,7 +163,7 @@ class EmbeddingCompressor(nn.Module):
         # a = batch x (n_tables * n_codes)
         #print('a', a.data.shape)
 
-        d = gumbel_softmax(a, tau=self.temp, hard=False)
+        d = gumbel_softmax(a, tau=self.temp, hard=True)
         d = d.view(self.n_tables, -1, self.n_codes)
         #d = d.view(self.n_tables, -1, self.n_codes)
         # print('d', d.size())
