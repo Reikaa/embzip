@@ -1,5 +1,6 @@
 import argparse
 import math
+import os
 import torch
 
 from embzip.data import load_embeddings_txt, make_vocab, print_compression_stats, check_training
@@ -70,47 +71,62 @@ if __name__ == '__main__':
     old_params = None
 
     samples = 0
-    while samples < args.samples:
+    try:
+        while samples < args.samples:
 
-        # shuffle embeddings
-        embeddings = train_vocab['embeddings'][torch.randperm(train_vocab['n_embs'])]
+            # shuffle embeddings
+            embeddings = train_vocab['embeddings'][torch.randperm(train_vocab['n_embs'])]
 
-        # train
-        for k in range(0, train_vocab['n_embs'], args.batch_size):
-            samples += 1
-            batch = embeddings[k:k+args.batch_size]
+            # train
+            for k in range(0, train_vocab['n_embs'], args.batch_size):
+                samples += 1
+                batch = embeddings[k:k+args.batch_size]
 
-            y = ec(batch)
+                y = ec(batch)
 
-            loss = criterion(y, batch)
-            losses.append(loss.data[0])
+                loss = criterion(y, batch)
+                losses.append(loss.data[0])
 
-            #print(['%.4f' % x for x in y.data[0]])
-            #print(['%.4f' % x for x in batch.data[0]])
+                #print(['%.4f' % x for x in y.data[0]])
+                #print(['%.4f' % x for x in batch.data[0]])
 
-            def euclidian_dist(x, y):
-                return math.sqrt(sum((i - j) ** 2 for i, j in zip(x, y)))
-            #print(y.size(0))
-            # for i in range(y.size(0)):
-            #     print('E', euclidian_dist(y.data[i], batch.data[i]))
-            #print('L', loss.data[0])
-            #print()
+                def euclidian_dist(x, y):
+                    return math.sqrt(sum((i - j) ** 2 for i, j in zip(x, y)))
+                #print(y.size(0))
+                # for i in range(y.size(0)):
+                #     print('E', euclidian_dist(y.data[i], batch.data[i]))
+                #print('L', loss.data[0])
+                #print()
 
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
+                optim.zero_grad()
+                loss.backward()
+                optim.step()
 
-            if samples % args.report_every == 0:
-                avg_train_loss = sum(losses) / len(losses) / args.batch_size
-                print('train_loss: %.3f' % avg_train_loss)
-                losses = []
+                if samples % args.report_every == 0:
+                    avg_train_loss = sum(losses) / len(losses) / args.batch_size
+                    print('train_loss: %.3f' % avg_train_loss)
+                    losses = []
 
-                # validate
-                v_batch = valid_vocab['embeddings']
-                v_y = ec(v_batch)
-                v_loss = criterion(v_y, v_batch)
-                print('\nvalid_loss: %.3f' % (v_loss.data[0] / v_batch.data.shape[0]))
+                    # validate
+                    v_batch = valid_vocab['embeddings']
+                    v_y = ec(v_batch)
+                    v_loss = criterion(v_y, v_batch)
+                    print('\nvalid_loss: %.3f' % (v_loss.data[0] / v_batch.data.shape[0]))
 
-        #check_training(old_params, ec.parameters())
-        #old_params = ec.parameters()
-        #print([p.sum().data[0] for p in old_params])
+            #check_training(old_params, ec.parameters())
+            #old_params = ec.parameters()
+            #print([p.sum().data[0] for p in old_params])
+    except KeyboardInterrupt:
+        print('ssss')
+        # dump to file
+        comp_emb_file = args.path + '.comp'
+        print(comp_emb_file)
+        with open(comp_emb_file, 'wt') as f:
+            for word, emb in train_g.items():
+                print(word)
+                emb_comp = ec(emb).squeeze().cpu().data.numpy().tolist()
+                for x in emb_comp:
+                    word += ' ' + str(x)
+                f.write(word + '\n')
+
+
