@@ -142,10 +142,11 @@ class EmbeddingCompressor(nn.Module):
         self.n_tables = n_tables
         self.temp = temp
         self.hard = hard
-        mk_half = math.floor(n_tables * n_codes / 2)
-        self.linear1 = torch.nn.Linear(emb_size, mk_half)
-        self.linear2 = torch.nn.Linear(mk_half, n_tables * n_codes)
-        self.embeddings = FactorizedEmbeddings(emb_size, n_tables, n_codes)
+        mk_half = n_tables * n_codes // 2
+        self.linear1 = nn.Linear(emb_size, mk_half)
+        self.linear2 = nn.Linear(mk_half, n_tables * n_codes)
+        #self.embeddings = FactorizedEmbeddings(emb_size, n_tables, n_codes)
+        self.embeddings = nn.Linear(n_tables * n_codes, emb_size, bias=False)
 
     def forward(self, x):
         """
@@ -153,22 +154,21 @@ class EmbeddingCompressor(nn.Module):
         a Variable of output data. We can use Modules defined in the constructor as
         well as arbitrary operators on Variables.
         """
-        # x = batch x emb_size
+        # B x E -> B x MK/2
         h = nn.Tanh()(self.linear1(x))
 
-        # h = batch x (n_tables * n_codes / 2)
+        # B x MK/2 -> B x MK
         a = nn.functional.softplus(self.linear2(h))
-        #a = a.view(self.n_tables, -1, self.n_codes)
 
-        # a = batch x (n_tables * n_codes)
-        #print('a', a.data.shape)
+        # B x MK -> BM x K
+        a = a.view(-1, self.n_codes)
 
+        # BM x K -> BM x K
         d = gumbel_softmax(a, tau=self.temp, hard=self.hard)
-        d = d.view(self.n_tables, -1, self.n_codes)
-        #d = d.view(self.n_tables, -1, self.n_codes)
-        # print('d', d.size())
-        # print(d.data)
-        #print(torch.sum(d.data, -1))
 
+        # BM x K -> B x MK
+        d = d.view(-1, self.n_tables * self.n_codes)
+
+        # B x MK -> B x E
         return self.embeddings(d)
 

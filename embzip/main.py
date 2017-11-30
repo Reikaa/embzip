@@ -97,7 +97,8 @@ if __name__ == '__main__':
             for k in range(0, train_vocab['n_embs'], args.batch_size):
                 samples += 1
                 batch = embeddings[k:k+args.batch_size]
-                batch = batch.cuda()
+                if args.cuda:
+                    batch = batch.cuda()
 
                 y_pred = ec(batch)
 

@@ -79,21 +79,17 @@ def test_factorized_embeddings(emb_size, n_dic, n_codes, indices):
 
 
 @parameterized([
-    (None, 5, 4),
-    (2, 5, 4)
+    (2, 3, 4)
 ])
-def test_gumbel_softmax(batch, n_dic, n_codes):
-    size = torch.Size([n_dic, n_codes])
-    if batch is not None:
-        size = torch.Size([batch]) + size
+def test_gumbel_softmax(b, m, k):
 
-    out_size = size[:-1]
+    logits = Variable(1 * torch.Tensor(b * m, k).uniform_())
 
-    logits = Variable(1 * torch.Tensor(size).uniform_())
+    gsm = gumbel_softmax(logits, tau=1, hard=True)
+    print(gsm)
+    print(gsm.view(b, m * k))
 
-    gsm = gumbel_softmax(logits, temperature=1, hard=False)
-
-    assert torch.equal(torch.ones(out_size), torch.sum(gsm, -1).data)
+    assert torch.equal(torch.ones(b*m), torch.sum(gsm, -1).data)
 
 
 @parameterized([
