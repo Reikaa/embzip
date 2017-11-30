@@ -18,8 +18,6 @@ def load_embeddings_txt(path, max=None, vsize=0):
             word = tokens[0]
             # 1 x EmbSize
             vector = np.array(tokens[1:], dtype=np.float32)[None, :]
-            vector = torch.from_numpy(vector)
-            vector = torch.autograd.Variable(vector, requires_grad=False)
             if i < max:
                 train[word] = vector
             if i > max:
@@ -27,17 +25,18 @@ def load_embeddings_txt(path, max=None, vsize=0):
     return train, valid
 
 
-def make_vocab(word2var):
-    if not word2var:
+def make_vocab(word2vector):
+    if not word2vector:
         return None
     idx2word = []
     word2idx = {}
     all_vars = []
-    for word, var in word2var.items():
+    for word, vector in word2vector.items():
         word2idx[word] = len(idx2word)
         idx2word.append(word)
-        all_vars.append(var)
+        all_vars.append(torch.from_numpy(vector))
     embeddings = torch.cat(all_vars, 0)
+    embeddings = torch.autograd.Variable(embeddings, requires_grad=False)
     return dict(idx2word=idx2word,
                 word2idx=word2idx,
                 embeddings=embeddings,

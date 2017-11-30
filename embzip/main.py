@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 import torch
+from torch import nn
 
 from embzip.data import load_embeddings_txt, make_vocab, print_compression_stats, check_training
 from embzip.model import EmbeddingCompressor
@@ -51,24 +52,29 @@ if __name__ == '__main__':
     parser.add_argument('--cuda',
                         action='store_true',
                         help='Run on GPU')
+    parser.add_argument('--hard',
+                        action='store_true',
+                        help='Use hard gumbel softmax')
     args = parser.parse_args()
 
     # load embeddings
     train_g, valid_g = load_embeddings_txt(args.path, args.n_embs, args.valid)
     train_vocab = make_vocab(train_g)
-    valid_vocab = make_vocab(valid_g) if valid_g else train_vocab
+    valid_vocab = make_vocab(valid_g) if valid_g else make_vocab(train_g)
 
     # stats
     print_compression_stats(train_vocab, args.n_tables, args.n_codes)
 
     # model
-    ec = EmbeddingCompressor(train_vocab['emb_size'], args.n_tables, args.n_codes, args.temp)
+    ec = EmbeddingCompressor(train_vocab['emb_size'], args.n_tables, args.n_codes, args.temp, args.hard)
+    #ec = nn.DataParallel(ec)
 
     # optimizer
     optim = torch.optim.Adam(ec.parameters(), lr=args.lr)
 
     # criterion
-    criterion = torch.nn.MSELoss(size_average=False)
+    #criterion = torch.nn.PairwiseDistance(2)
+    criterion = torch.nn.MSELoss(size_average=True)
 
     losses = []
     old_params = None
@@ -84,53 +90,62 @@ if __name__ == '__main__':
         while samples < args.samples:
 
             # shuffle embeddings
+            embeddings = train_vocab['embeddings']
             embeddings = train_vocab['embeddings'][torch.randperm(train_vocab['n_embs'])]
 
             # train
             for k in range(0, train_vocab['n_embs'], args.batch_size):
                 samples += 1
                 batch = embeddings[k:k+args.batch_size]
+                batch = batch.cuda()
 
-                y = ec(batch)
+                y_pred = ec(batch)
 
-                loss = criterion(y, batch)
+                loss = criterion(y_pred, batch)
+                #loss = (y_pred - batch).pow(2).sum()
                 losses.append(loss.data[0])
 
                 #print(['%.4f' % x for x in y.data[0]])
                 #print(['%.4f' % x for x in batch.data[0]])
 
                 def euclidian_dist(x, y):
-                    return math.sqrt(sum((i - j) ** 2 for i, j in zip(x, y)))
-                #print(y.size(0))
-                # for i in range(y.size(0)):
-                #     print('E', euclidian_dist(y.data[i], batch.data[i]))
-                #print('L', loss.data[0])
-                #print()
+                    return math.sqrt((x - y).pow(2).sum())
+                    #return math.sqrt(sum((i - j) ** 2 for i, j in zip(x, y)))
+                #avg_euc = sum([euclidian_dist(y_pred.data[i], batch.data[i]) for i in range(y_pred.size(0))]) / y_pred.size(0)
 
                 optim.zero_grad()
                 loss.backward()
                 optim.step()
 
                 if samples % args.report_every == 0:
-                    avg_train_loss = sum(losses) / len(losses) / args.batch_size
+                    avg_train_loss = sum(losses) / len(losses)
                     losses = []
 
                     # validate
                     v_batch = valid_vocab['embeddings']
+                    #v_batch = train_vocab['embeddings']
+                    #print(train_vocab['embeddings'].data.shape, v_batch.data.shape)
+                    #print(torch.sum(train_vocab['embeddings']))
+                    #v_batch = batch
                     if args.cuda:
                         v_batch = v_batch.cuda()
                     v_y = ec(v_batch)
                     v_loss = criterion(v_y, v_batch)
-                    v_loss = v_loss.data[0] / v_batch.data.shape[0]
-                    print('[%d] train: %.2f | valid: %.2f' % (samples, avg_train_loss, v_loss))
+                    #v_loss = (v_y - v_batch).pow(2).sum()
+                    v_loss = v_loss.data[0]
+                    avg_euc = sum([euclidian_dist(v_y.data[i], v_batch.data[i]) for i in range(v_y.size(0))]) / v_y.size(0)
+                    print('[%d] train: %.5f | valid: %.5f | euc_dist: %.2f' % (samples, avg_train_loss, v_loss, avg_euc))
+                    print([p.sum().data[0] for p in ec.parameters()])
 
     except KeyboardInterrupt:
         # dump to file
         comp_emb_file = args.path + '.comp'
-        print(comp_emb_file)
+        print('Saving reconstructed embeddings for train set in %s' % comp_emb_file)
         with open(comp_emb_file, 'wt') as f:
             for word, emb in train_g.items():
                 print(word)
+                if args.cuda:
+                    emb = emb.cuda()
                 emb_comp = ec(emb).squeeze().cpu().data.numpy().tolist()
                 for x in emb_comp:
                     word += ' ' + str(x)

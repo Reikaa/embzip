@@ -71,7 +71,7 @@ def gumbel_softmax_sample(logits, tau=1, eps=1e-10):
     dims = len(logits.size())
     gumbel_noise = sample_gumbel(logits.size(), eps=eps, out=logits.data.new())
     y = logits + Variable(gumbel_noise)
-    #return F.softmax(y / tau, dims - 1)
+    #y = F.log_softmax(y.view(-1, logits.size(-1)) / tau)
     y = F.softmax(y.view(-1, logits.size(-1)) / tau)
     return y.view_as(logits)
 
@@ -119,8 +119,8 @@ class FactorizedEmbeddings(nn.Module):
         self.emb_size = emb_size
         self.n_codes = n_codes
         self.n_dic = n_dic
-        self.tables = torch.nn.Parameter(torch.nn.init.uniform(
-                torch.Tensor(n_dic, n_codes, emb_size), -0.001, 0.001))
+        self.tables = torch.nn.Parameter(torch.nn.init.xavier_uniform(
+                torch.Tensor(n_dic, n_codes, emb_size)))
 
     def forward(self, x):
         """x has shape `batch x n_dict x n_codes"""
@@ -131,7 +131,7 @@ class FactorizedEmbeddings(nn.Module):
 
 
 class EmbeddingCompressor(nn.Module):
-    def __init__(self, emb_size, n_tables, n_codes, temp=1):
+    def __init__(self, emb_size, n_tables, n_codes, temp, hard):
         """
            n_tables:   (M)
            n_codes: (K)
@@ -141,11 +141,11 @@ class EmbeddingCompressor(nn.Module):
         self.n_codes = n_codes
         self.n_tables = n_tables
         self.temp = temp
+        self.hard = hard
         mk_half = math.floor(n_tables * n_codes / 2)
         self.linear1 = torch.nn.Linear(emb_size, mk_half)
         self.linear2 = torch.nn.Linear(mk_half, n_tables * n_codes)
         self.embeddings = FactorizedEmbeddings(emb_size, n_tables, n_codes)
-        #self.gumbel_softmax = GumbelSoftmax()
 
     def forward(self, x):
         """
@@ -163,7 +163,7 @@ class EmbeddingCompressor(nn.Module):
         # a = batch x (n_tables * n_codes)
         #print('a', a.data.shape)
 
-        d = gumbel_softmax(a, tau=self.temp, hard=True)
+        d = gumbel_softmax(a, tau=self.temp, hard=self.hard)
         d = d.view(self.n_tables, -1, self.n_codes)
         #d = d.view(self.n_tables, -1, self.n_codes)
         # print('d', d.size())
@@ -172,5 +172,3 @@ class EmbeddingCompressor(nn.Module):
 
         return self.embeddings(d)
 
-
-   
