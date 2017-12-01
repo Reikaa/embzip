@@ -16,7 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_embs',
                         type=int,
                         default=75000,
-                        help='Number of embeddings to consider')
+                        help='Number of emb_tables to consider')
     parser.add_argument('--n_tables',
                         type=int,
                         required=True,
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_codes',
                         type=int,
                         required=True,
-                        help='Number of embeddings in each table')
+                        help='Number of emb_tables in each table')
     parser.add_argument('--samples',
                         type=int,
                         default=200000,
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         type=int,
                         default=128,
-                        help='Number of embeddings in each batch')
+                        help='Number of emb_tables in each batch')
     parser.add_argument('--lr',
                         type=float,
                         default=0.0001,
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     parser.add_argument('--valid',
                         type=int,
                         default=1000,
-                        help='Number of embeddings for validation')
+                        help='Number of emb_tables for validation')
     parser.add_argument('--cuda',
                         action='store_true',
                         help='Run on GPU')
@@ -57,7 +57,7 @@ if __name__ == '__main__':
                         help='Use hard gumbel softmax')
     args = parser.parse_args()
 
-    # load embeddings
+    # load emb_tables
     train_g, valid_g = load_embeddings_txt(args.path, args.n_embs, args.valid)
     train_vocab = make_vocab(train_g)
     valid_vocab = make_vocab(valid_g) if valid_g else make_vocab(train_g)
@@ -73,7 +73,6 @@ if __name__ == '__main__':
     optim = torch.optim.Adam(ec.parameters(), lr=args.lr)
 
     # criterion
-    #criterion = torch.nn.PairwiseDistance(2)
     criterion = torch.nn.MSELoss(size_average=True)
 
     losses = []
@@ -89,7 +88,7 @@ if __name__ == '__main__':
     try:
         while samples < args.samples:
 
-            # shuffle embeddings
+            # shuffle emb_tables
             embeddings = train_vocab['embeddings']
             embeddings = train_vocab['embeddings'][torch.randperm(train_vocab['n_embs'])]
 
@@ -124,9 +123,9 @@ if __name__ == '__main__':
 
                     # validate
                     v_batch = valid_vocab['embeddings']
-                    #v_batch = train_vocab['embeddings']
-                    #print(train_vocab['embeddings'].data.shape, v_batch.data.shape)
-                    #print(torch.sum(train_vocab['embeddings']))
+                    #v_batch = train_vocab['emb_tables']
+                    #print(train_vocab['emb_tables'].data.shape, v_batch.data.shape)
+                    #print(torch.sum(train_vocab['emb_tables']))
                     #v_batch = batch
                     if args.cuda:
                         v_batch = v_batch.cuda()
@@ -141,7 +140,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         # dump to file
         comp_emb_file = args.path + '.comp'
-        print('Saving reconstructed embeddings for train set in %s' % comp_emb_file)
+        print('Saving reconstructed emb_tables for train set in %s' % comp_emb_file)
         with open(comp_emb_file, 'wt') as f:
             for word, emb in train_g.items():
                 print(word)

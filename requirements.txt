@@ -21,6 +21,7 @@ stopit
 scikit-mdr
 skrebate
 tpot
+h5py
 
 nose
 parametrized

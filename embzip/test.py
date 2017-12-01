@@ -4,7 +4,8 @@ from torch.autograd import Variable
 from parameterized import parameterized
 
 from embzip.data import load_embeddings_txt, make_vocab
-from embzip.model import FactorizedEmbeddings,one_hot, gumbel_softmax, EmbeddingCompressor
+from embzip.model import gumbel_softmax, EmbeddingCompressor
+
 
 @parameterized([
     ('data/glove.6B.300d.txt', 100),
@@ -27,7 +28,7 @@ def test_vocab(path, maxsize):
 
     assert len(vocab['idx2word']) == \
            len(vocab['word2idx']) == \
-           vocab['embeddings'].data.shape[0]
+           vocab['emb_tables'].data.shape[0]
 
 
 @parameterized([
@@ -46,36 +47,6 @@ def test_one_hot(batch, n_dic, n_codes):
 
     exp_size = size + torch.Size([n_codes])
     assert exp_size == o.size()
-
-
-@parameterized([
-    #(7, 2, 3, [1, 1]),
-    #(7, 2, 3, [[1, 1], [2, 2]]),
-    (7, 4, 3, [[1, 1, 1, 1], [2, 2, 2, 2]]),
-])
-def test_factorized_embeddings(emb_size, n_dic, n_codes, indices):
-    embs = FactorizedEmbeddings(emb_size, n_dic, n_codes)
-
-    # set each table row to its index value
-    for _, table in enumerate(embs.tables):
-        for j in range(table.size(0)):
-            table.data[j] = j
-
-    # build input one-hot matrix
-    indices = torch.LongTensor(indices)
-    if len(indices.size()) == 1:
-        indices = indices[None, :]
-
-    sums = torch.sum(indices, 1)[:, None].repeat(1, emb_size)
-    print(sums)
-
-    o = one_hot(indices.transpose(0, 1).contiguous(), n_codes)
-    print(o.size())
-    out = embs(Variable(o))
-
-    print(out.size())
-    print(out)
-    assert torch.equal(out.data.long(), sums)
 
 
 @parameterized([
