@@ -2,7 +2,9 @@ import argparse
 import math
 import os
 import torch
+
 from torch import nn
+from time import time
 
 from embzip.data import load_embeddings_txt, make_vocab, print_compression_stats, check_training
 from embzip.model import EmbeddingCompressor
@@ -67,7 +69,7 @@ if __name__ == '__main__':
 
     # model
     ec = EmbeddingCompressor(train_vocab['emb_size'], args.n_tables, args.n_codes, args.temp, args.hard)
-    #ec = nn.DataParallel(ec)
+    ec = nn.DataParallel(ec)
 
     # optimizer
     optim = torch.optim.Adam(ec.parameters(), lr=args.lr)
@@ -95,6 +97,7 @@ if __name__ == '__main__':
 
             # train
             for k in range(0, train_vocab['n_embs'], args.batch_size):
+                t0 = time()
                 samples += 1
                 batch = embeddings[k:k+args.batch_size]
                 if args.cuda:
@@ -118,6 +121,8 @@ if __name__ == '__main__':
                 loss.backward()
                 optim.step()
 
+                t1 = args.batch_size * 1000 * (time() - t0)
+
                 if samples % args.report_every == 0:
                     avg_train_loss = sum(losses) / len(losses)
                     losses = []
@@ -130,12 +135,14 @@ if __name__ == '__main__':
                     #v_batch = batch
                     if args.cuda:
                         v_batch = v_batch.cuda()
+
                     v_y = ec(v_batch)
+
                     v_loss = criterion(v_y, v_batch)
                     #v_loss = (v_y - v_batch).pow(2).sum()
                     v_loss = v_loss.data[0]
                     avg_euc = sum([euclidian_dist(v_y.data[i], v_batch.data[i]) for i in range(v_y.size(0))]) / v_y.size(0)
-                    print('[%d] train: %.5f | valid: %.5f | euc_dist: %.2f' % (samples, avg_train_loss, v_loss, avg_euc))
+                    print('[%d] train: %.5f | valid: %.5f | euc_dist: %.2f | %.2f emb/sec' % (samples, avg_train_loss, v_loss, avg_euc, t1))
                     print([p.sum().data[0] for p in ec.parameters()])
 
     except KeyboardInterrupt:
