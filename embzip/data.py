@@ -1,10 +1,9 @@
 import math
 import torch
 import numpy as np
-import torch.nn.functional as F
+import h5py
+
 from collections import OrderedDict
-from torch import nn
-from torch.autograd import Variable
 
 
 def load_embeddings_txt(path, max=None, vsize=0):
@@ -67,5 +66,28 @@ def check_training(old_params, new_params):
             print('WARNING: some parameter did not seem to change!')
 
 
+def euclidian_dist(x, y):
+    return math.sqrt((x - y).pow(2).sum())
 
+
+def dump_reconstructed_embeddings(out_file, model, emb_dict):
+    print('Saving reconstructed emb_tables for train set in %s' % out_file)
+    with open(out_file, 'wt') as f:
+        for word, emb in emb_dict.items():
+            print(word)
+            emb_comp = model(emb).squeeze().cpu().data.numpy().tolist()
+            for x in emb_comp:
+                word += ' ' + str(x)
+            f.write(word + '\n')
+
+
+def save_hdf5(out_file, model, emb_dict):
+    print('Saving compressed embedding in %s' % out_file)
+    # embeddings
+    f = h5py.File(out_file, "w")
+    f.create_dataset("embeddings", data=model.emb_tables.W.data)
+    # words
+    words = list(emb_dict.keys)
+
+    # indices
 

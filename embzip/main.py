@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from time import time
 
-from embzip.data import load_embeddings_txt, make_vocab, print_compression_stats, check_training
+from embzip.data import load_embeddings_txt, make_vocab, print_compression_stats, euclidian_dist, check_training, dump_reconstructed_embeddings
 from embzip.model import EmbeddingCompressor
 
 if __name__ == '__main__':
@@ -29,7 +29,7 @@ if __name__ == '__main__':
                         help='Number of emb_tables in each table')
     parser.add_argument('--samples',
                         type=int,
-                        default=200000,
+                        default=int(1e7),
                         help='Number of batches through the data')
     parser.add_argument('--report_every',
                         type=int,
@@ -69,7 +69,6 @@ if __name__ == '__main__':
 
     # model
     ec = EmbeddingCompressor(train_vocab['emb_size'], args.n_tables, args.n_codes, args.temp, args.hard)
-    ec = nn.DataParallel(ec)
 
     # optimizer
     optim = torch.optim.Adam(ec.parameters(), lr=args.lr)
@@ -83,6 +82,7 @@ if __name__ == '__main__':
     print('[CUDA]', args.cuda)
     if args.cuda:
         ec.cuda()
+        ec = nn.DataParallel(ec)
         criterion.cuda()
 
     samples = 0
@@ -91,13 +91,12 @@ if __name__ == '__main__':
         while samples < args.samples:
 
             # shuffle emb_tables
-            embeddings = train_vocab['embeddings']
             embeddings = train_vocab['embeddings'][torch.randperm(train_vocab['n_embs'])]
 
             # train
             for k in range(0, train_vocab['n_embs'], args.batch_size):
                 t0 = time()
-                samples += 1
+                samples += args.batch_size
                 batch = embeddings[k:k+args.batch_size]
                 if args.cuda:
                     batch = batch.cuda()
@@ -105,16 +104,7 @@ if __name__ == '__main__':
                 y_pred = ec(batch)
 
                 loss = criterion(y_pred, batch)
-                #loss = (y_pred - batch).pow(2).sum()
                 losses.append(loss.data[0])
-
-                #print(['%.4f' % x for x in y.data[0]])
-                #print(['%.4f' % x for x in batch.data[0]])
-
-                def euclidian_dist(x, y):
-                    return math.sqrt((x - y).pow(2).sum())
-                    #return math.sqrt(sum((i - j) ** 2 for i, j in zip(x, y)))
-                #avg_euc = sum([euclidian_dist(y_pred.data[i], batch.data[i]) for i in range(y_pred.size(0))]) / y_pred.size(0)
 
                 optim.zero_grad()
                 loss.backward()
@@ -123,37 +113,29 @@ if __name__ == '__main__':
                 t1 = args.batch_size * 1000 * (time() - t0)
 
                 if samples % args.report_every == 0:
+                    # check validation set and report
                     avg_train_loss = sum(losses) / len(losses)
                     losses = []
 
                     # validate
                     v_batch = valid_vocab['embeddings']
-                    #v_batch = train_vocab['emb_tables']
-                    #print(train_vocab['emb_tables'].data.shape, v_batch.data.shape)
-                    #print(torch.sum(train_vocab['emb_tables']))
-                    #v_batch = batch
                     if args.cuda:
                         v_batch = v_batch.cuda()
 
                     v_y = ec(v_batch)
 
                     v_loss = criterion(v_y, v_batch)
-                    #v_loss = (v_y - v_batch).pow(2).sum()
                     v_loss = v_loss.data[0]
                     avg_euc = sum([euclidian_dist(v_y.data[i], v_batch.data[i]) for i in range(v_y.size(0))]) / v_y.size(0)
                     print('[%d] train: %.5f | valid: %.5f | euc_dist: %.2f | %.2f emb/sec' % (samples, avg_train_loss, v_loss, avg_euc, t1))
-                    print([p.sum().data[0] for p in ec.parameters()])
+                    #print([p.sum().data[0] for p in ec.parameters()])
 
     except KeyboardInterrupt:
-        # dump to file
-        comp_emb_file = args.path + '.comp'
-        print('Saving reconstructed emb_tables for train set in %s' % comp_emb_file)
-        with open(comp_emb_file, 'wt') as f:
-            for word, emb in train_g.items():
-                print(word)
-                if args.cuda:
-                    emb = emb.cuda()
-                emb_comp = ec(emb).squeeze().cpu().data.numpy().tolist()
-                for x in emb_comp:
-                    word += ' ' + str(x)
-                f.write(word + '\n')
+        print('Training stopped!')
+
+    # dump full size reconstructed embeddings to file
+    dump_reconstructed_embeddings(args.path + '.comp', ec, train_g)
+
+    # save compressed embeddings in hdf5 format
+    save_hdf5(args.path + '.h5', ec, train_g)
+
