@@ -74,7 +74,8 @@ def dump_reconstructed_embeddings(out_file, model, emb_dict):
     print('Saving reconstructed emb_tables for train set in %s' % out_file)
     with open(out_file, 'wt') as f:
         for word, emb in emb_dict.items():
-            print(word)
+            #print(word)
+            emb = torch.autograd.Variable(torch.from_numpy(emb))
             emb_comp = model(emb).squeeze().cpu().data.numpy().tolist()
             for x in emb_comp:
                 word += ' ' + str(x)

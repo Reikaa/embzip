@@ -29,8 +29,8 @@ if __name__ == '__main__':
                         help='Number of emb_tables in each table')
     parser.add_argument('--samples',
                         type=int,
-                        default=int(1e7),
-                        help='Number of batches through the data')
+                        default=int(2e7),
+                        help='Number of embeddings to train')
     parser.add_argument('--report_every',
                         type=int,
                         default=1000,
@@ -137,5 +137,5 @@ if __name__ == '__main__':
     dump_reconstructed_embeddings(args.path + '.comp', ec, train_g)
 
     # save compressed embeddings in hdf5 format
-    save_hdf5(args.path + '.h5', ec, train_g)
+    #:save_hdf5(args.path + '.h5', ec, train_g)
 
