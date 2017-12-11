@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from time import time
 
-from embzip.data import load_embeddings_txt, make_vocab, print_compression_stats, euclidian_dist, check_training, dump_reconstructed_embeddings
+from embzip.data import load_embeddings_txt, make_vocab, print_compression_stats, euclidian_dist, check_training, dump_reconstructed_embeddings, load_artichoke, save_artichoke
 from embzip.model import EmbeddingCompressor
 
 if __name__ == '__main__':
@@ -18,7 +18,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_embs',
                         type=int,
                         default=75000,
-                        help='Number of emb_tables to consider')
+                        help='Number of fact_embs to consider')
     parser.add_argument('--n_tables',
                         type=int,
                         required=True,
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_codes',
                         type=int,
                         required=True,
-                        help='Number of emb_tables in each table')
+                        help='Number of fact_embs in each table')
     parser.add_argument('--samples',
                         type=int,
                         default=int(2e7),
@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',
                         type=int,
                         default=128,
-                        help='Number of emb_tables in each batch')
+                        help='Number of fact_embs in each batch')
     parser.add_argument('--lr',
                         type=float,
                         default=0.0001,
@@ -50,17 +50,29 @@ if __name__ == '__main__':
     parser.add_argument('--valid',
                         type=int,
                         default=1000,
-                        help='Number of emb_tables for validation')
+                        help='Number of fact_embs for validation')
     parser.add_argument('--cuda',
                         action='store_true',
                         help='Run on GPU')
     parser.add_argument('--hard',
                         action='store_true',
                         help='Use hard gumbel softmax')
+    parser.add_argument('--load_artichoke',
+                        action='store_true',
+                        help='Load pre-trained artichoke embeddings')
+    parser.add_argument('--save_artichoke',
+                        action='store_true',
+                        help='Save model into artichoke format')
     args = parser.parse_args()
 
-    # load emb_tables
-    train_g, valid_g = load_embeddings_txt(args.path, args.n_embs, args.valid)
+    # load embeddings
+    if args.load_artichoke:
+        # from artichoke h5
+        train_g, valid_g = load_artichoke(args.path)
+    else:
+        # from text file
+        train_g, valid_g = load_embeddings_txt(args.path, args.n_embs, args.valid)
+
     train_vocab = make_vocab(train_g)
     valid_vocab = make_vocab(valid_g) if valid_g else make_vocab(train_g)
 
@@ -90,7 +102,7 @@ if __name__ == '__main__':
     try:
         while samples < args.samples:
 
-            # shuffle emb_tables
+            # shuffle fact_embs
             embeddings = train_vocab['embeddings'][torch.randperm(train_vocab['n_embs'])]
 
             # train
@@ -134,8 +146,9 @@ if __name__ == '__main__':
         print('Training stopped!')
 
     # dump full size reconstructed embeddings to file
-    dump_reconstructed_embeddings(args.path + '.comp', ec, train_g)
+    #dump_reconstructed_embeddings(args.path + '.comp', ec, train_g)
 
     # save compressed embeddings in hdf5 format
     #:save_hdf5(args.path + '.h5', ec, train_g)
-
+    if args.save_artichoke:
+        save_artichoke(args.path + '.comp', ec, train_g)

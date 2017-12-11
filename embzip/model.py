@@ -65,6 +65,17 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10):
     return y
 
 
+class FactorizedEmbeddings(nn.Module):
+    def __init__(self, emb_size, n_tables, n_codes, np_array=None):
+        super().__init__()
+        self.emb_tables = nn.Linear(n_tables * n_codes, emb_size, bias=False)
+        if np_array is not None:
+            self.emb_tables.weight.copy_(torch.from_numpy(np_array))
+
+    def forward(self, one_hot):
+        return self.emb_tables(one_hot)
+
+
 class EmbeddingCompressor(nn.Module):
     def __init__(self, emb_size, n_tables, n_codes, temp=1, hard=True):
         """
@@ -83,7 +94,7 @@ class EmbeddingCompressor(nn.Module):
         mk_half = n_tables * n_codes // 2
         self.linear1 = nn.Linear(emb_size, mk_half)
         self.linear2 = nn.Linear(mk_half, n_tables * n_codes)
-        self.emb_tables = nn.Linear(n_tables * n_codes, emb_size, bias=False)
+        self.fact_embs = FactorizedEmbeddings(emb_size, n_tables, n_codes)
 
     def get_indices(self, x):
         """Given a batch of embeddings of shape B x E
@@ -91,7 +102,7 @@ class EmbeddingCompressor(nn.Module):
         """
         # B x E -> B x MK
         one_hot = self.encode(x)
-        return [torch.nonzero(one_hot[i]).squeeze().cpu().tolist()
+        return [torch.nonzero(one_hot[i].data).squeeze().cpu().tolist()
                 for i in range(one_hot.size(0))]
 
     def encode(self, x):
@@ -99,6 +110,7 @@ class EmbeddingCompressor(nn.Module):
            returns a batch of one-hot embeddings of shape B x M x K
         """
         # B x E -> B x MK/2
+        
         h = nn.Tanh()(self.linear1(x))
 
         # B x MK/2 -> B x MK
@@ -118,4 +130,4 @@ class EmbeddingCompressor(nn.Module):
         one_hot = self.encode(x)
 
         # B x MK -> B x E
-        return self.emb_tables(one_hot)
+        return self.fact_embs(one_hot)

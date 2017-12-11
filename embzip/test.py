@@ -1,9 +1,11 @@
+import os
 import torch
-from torch.autograd import Variable
+import numpy as np
 
+from torch.autograd import Variable
 from parameterized import parameterized
 
-from embzip.data import load_embeddings_txt, make_vocab
+from embzip.data import load_embeddings_txt, make_vocab, load_hdf5, save_hdf5
 from embzip.model import gumbel_softmax, EmbeddingCompressor
 
 
@@ -28,7 +30,7 @@ def test_vocab(path, maxsize):
 
     assert len(vocab['idx2word']) == \
            len(vocab['word2idx']) == \
-           vocab['emb_tables'].data.shape[0]
+           vocab['fact_embs'].data.shape[0]
 
 
 @parameterized([
@@ -71,3 +73,17 @@ def test_compressor(batch, emb_size, n_dic, n_codes):
     inp = Variable(torch.Tensor(batch, emb_size).uniform_())
     out = ec(inp)
     print(out)
+
+
+@parameterized([
+    ('data/glove.6B.300d.txt', 100),
+])
+def test_save_hdf5(path, num_embs):
+    gloves, _ = load_embeddings_txt(path, num_embs)
+    ec = EmbeddingCompressor(300, 8, 16)
+
+    orig_embs, orig_vocab_map = save_hdf5('foo.h5', ec, gloves)
+    embs, vocab_map = load_hdf5('foo.h5')
+
+    assert(np.array_equal(orig_embs, embs))
+    assert orig_vocab_map == vocab_map
