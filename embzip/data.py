@@ -85,10 +85,49 @@ def dump_reconstructed_embeddings(out_file, model, emb_dict):
 def save_hdf5(out_file, model, emb_dict):
     print('Saving compressed embedding in %s' % out_file)
     # embeddings
-    f = h5py.File(out_file, "w")
-    f.create_dataset("embeddings", data=model.emb_tables.W.data)
+    f = h5py.File(h5_file, 'w')
+    embs = model.emb_tables.weight.cpu().data.numpy()
+    f.create_dataset('embeddings', data=embs)
     # words
     words = list(emb_dict.keys)
 
     # indices
 
+def load_hdf5(h5_file):
+    print('Loading compressed embeddings in %s' % h5_file)
+    f = h5py.File(h5_file, 'r')
+    # embeddings
+    embs = np.array(f['embeddings'])
+    words = list(f['vocab'])
+    indices = list(f['indices'])
+    #print(embs.dtype, words, indices)
+    vocab_map = {k: v.tolist() for k, v in zip(words, indices)}
+    return embs, vocab_map
+
+
+def load_artichoke(h5_file):
+    print('Loading Artichoke file: %s' % h5_file)
+    f = h5py.File(h5_file, 'r')
+    words = list(f['/data/vocab/7fd01463c400/values'])
+    embs = f['/data/parameters/embedding/W']
+    embs = np.split(embs, embs.shape[0])
+
+    train_d = {k: v for k, v in zip(words, embs)}
+    #print(words)
+    f.close()
+    return train_d, None
+
+
+def save_artichoke(h5_file, model, emb_dict):
+    print('Saving Artichoke file: %s' % h5_file)
+    f = h5py.File(h5_file, 'r+')
+    embs = []
+    for word, emb in emb_dict.items():
+        # print(word)
+        emb = torch.autograd.Variable(torch.from_numpy(emb))
+        emb_comp = model(emb).squeeze().cpu().data.numpy().tolist()
+        embs.append(emb_comp)
+
+    f_embs = f['/data/parameters/embedding/W']
+    f_embs[...] = embs
+    f.close()

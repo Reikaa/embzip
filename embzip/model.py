@@ -65,6 +65,83 @@ def gumbel_softmax(logits, tau=1, hard=False, eps=1e-10):
     return y
 
 
+class FactorizedEmbeddingsInput(nn.Module):
+    def __init__(self, emb_table, vocab_map):
+        '''
+            emb_table: numpy array (V x E)
+            vocab_map: {word -> [indices]}
+        '''
+        super().__init__()
+        self.emb_tables = nn.Embedding(*emb_table.shape)
+        self.emb_tables.weight.data.copy_(torch.from_numpy(emb_table))
+        self.vocab_map = vocab_map
+        self.index_map = torch.LongTensor(list(vocab_map.values()))
+
+    def forward(self, indices):
+        # B x S -> BS x M
+        exp_indices = self.index_map[indices.data.view(-1)]
+        # exp_indices = exp_indices.view(indices.size(0), indices.size(1), -1)
+
+        # BS x M -> BS x M x E
+        exp_embs = self.emb_tables(Variable(exp_indices))
+
+        # BS x M x E -> BS x E
+        exp_embs = exp_embs.sum(-2)
+
+        # BS x E -> B x S x E
+        exp_embs = exp_embs.view(indices.size(0), indices.size(1), -1)
+
+        return exp_embs
+
+    @classmethod
+    def load_hdf5(cls, h5_file):
+        print('Loading compressed embeddings in %s' % h5_file)
+        f = h5py.File(h5_file, 'r')
+        # embeddings
+        embs = np.array(f['embeddings'])
+        words = list(f['vocab'])
+        indices = list(f['indices'])
+        # print(embs.dtype, words, indices)
+        vocab_map = {k: v.tolist() for k, v in zip(words, indices)}
+        return cls(embs, vocab_map)
+
+
+
+class FactorizedEmbeddingsOutput(nn.Module):
+    def __init__(self, emb_table, vocab_map):
+        '''
+            emb_table: numpy array (V x E)
+            vocab_map: {word -> [indices]}
+        '''
+        super().__init__()
+        self.linear = nn.Linear(*emb_table.shape, bias=False)
+        self.linear.weight.data.copy_(torch.from_numpy(emb_table))
+        self.vocab_map = vocab_map
+        self.index_map = torch.LongTensor(list(vocab_map.values()))
+
+    def forward(self, x):
+        # B x E -> B x MK
+        mk_scores = self.linear(x)
+
+        # B x MK -> B x V
+        v_size = self.index_map.size(0)
+        v_scores = [mk_scores[:, self.index_map[i]].sum(1)
+                    for i in range(v_size)]
+        return torch.stack(v_scores, 1)
+
+    @classmethod
+    def load_hdf5(cls, h5_file):
+        print('Loading compressed embeddings in %s' % h5_file)
+        f = h5py.File(h5_file, 'r')
+        # embeddings
+        embs = np.array(f['embeddings'])
+        words = list(f['vocab'])
+        indices = list(f['indices'])
+        # print(embs.dtype, words, indices)
+        vocab_map = {k: v.tolist() for k, v in zip(words, indices)}
+        return cls(embs, vocab_map)
+
+
 class EmbeddingCompressor(nn.Module):
     def __init__(self, emb_size, n_tables, n_codes, temp=1, hard=True):
         """

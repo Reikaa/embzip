@@ -137,5 +137,4 @@ if __name__ == '__main__':
     dump_reconstructed_embeddings(args.path + '.comp', ec, train_g)
 
     # save compressed embeddings in hdf5 format
-    #:save_hdf5(args.path + '.h5', ec, train_g)
-
+    #:save_hdf5(args.path + '.h5;', ec, train_g)
